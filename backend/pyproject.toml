@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "midistral"
+version = "0.1.0"
+description = "Generate music notation and MIDI from text description"
+authors = ["Francois Lancelot"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+datasets = "^2.20.0"
+huggingface-hub = "^0.23.4"
+pandas = "^2.2.2"
+fire = "^0.6.0"
+tqdm = "^4.66.4"
+mido = "^1.3.2"
+mistralai = "^0.4.0"
+python-dotenv = "^1.0.1"
+fastapi = "^0.111.0"
+pydantic-settings = "^2.3.3"
+sqlalchemy = "^2.0.31"
+slowapi = "^0.1.9"
+google-cloud-firestore = "^2.16.1"
+
+google-cloud-storage = "^2.17.0"
+[tool.poetry.dev-dependencies]
+ruff = "^0.4.9"
+black = "^24.4.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+midistral-cli = "midistral.main:run"
