@@ -119,3 +119,9 @@ async def get_file(request: Request):
             return FileResponse(p)
     else:
         raise HTTPException(status_code=404, detail="File not found")
+
+
+@app.get("/version")
+@limiter.limit("10/minute")
+async def get_version(request: Request):
+    return {"version": get_settings().APP_VERSION}
