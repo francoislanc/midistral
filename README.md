@@ -5,3 +5,11 @@ This repository contains code :
 - [to interact through a web UI](./frontend/README.md) with the Midistral model 
 
 ![midistral-frontend.png](./frontend/docs/midistral-frontend.png)
+
+## Future developments
+
+- Adapt finetuning to follow more "instruments" constraints
+- Support more voices/tracks
+- Add more MIDI datasets (e.g. projectlosangeles/Los-Angeles-MIDI-Dataset, VGMusic, ...)
+- Share user generations
+- Support more Natural Language text input
