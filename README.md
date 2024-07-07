@@ -8,8 +8,12 @@ This repository contains code :
 
 ## Future developments
 
-- Adapt finetuning to follow more "instruments" constraints
-- Support more voices/tracks
-- Add more MIDI datasets (e.g. projectlosangeles/Los-Angeles-MIDI-Dataset, VGMusic, ...)
-- Share user generations
-- Support more Natural Language text input
+- Improve model
+  - Use more MIDI datasets (e.g. projectlosangeles/Los-Angeles-MIDI-Dataset, VGMusic, ...)
+  - Test RAG approach
+  - Adapt finetuning to follow more "instruments" constraints
+  - Support more voices/tracks
+  - Support more Natural Language text input
+  
+- Improve front-end
+  - Allow user generations sharing
