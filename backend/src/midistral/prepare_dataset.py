@@ -38,23 +38,30 @@ def clean_midi_vgm_dataset(
     labeled_midi_dataset_path: Path, keep_only_small_subset: bool
 ) -> Optional[Dataset]:
 
-    vgm_json_p = Path("data/vgm2.jsonl")
+    vgm_json_p = Path("data/vgm.jsonl")
     if vgm_json_p.exists():
         labeled_midi_dataset_path.parent.mkdir(exist_ok=True, parents=True)
-        labeled_midi_dataset = pd.read_json("data/vgm.jsonl", lines=True)
+        labeled_midi_dataset_df = pd.read_json(vgm_json_p, lines=True)
         # remove confidence score or uneeded value
         for k in ["genre", "mood", "tempo", "duration"]:
-            labeled_midi_dataset[k] = labeled_midi_dataset[k].map(lambda x: x[0])
-        # remove row with invalid value
-        labeled_midi_dataset = labeled_midi_dataset[
-            labeled_midi_dataset.tempo.apply(lambda x: isinstance(x, int))
+            labeled_midi_dataset_df[k] = labeled_midi_dataset_df[k].map(lambda x: x[0])
+        labeled_midi_dataset_df = labeled_midi_dataset_df[
+            [
+                "location",
+                "genre",
+                "mood",
+                "key",
+                "time_signature",
+                "duration",
+                "instrument_summary",
+            ]
         ]
 
         if keep_only_small_subset:
-            labeled_midi_dataset = labeled_midi_dataset.head(500)
+            labeled_midi_dataset_df = labeled_midi_dataset_df.head(500)
         # create dataset
         labeled_midi_dataset = Dataset.from_pandas(
-            labeled_midi_dataset, preserve_index=False
+            labeled_midi_dataset_df, preserve_index=False
         )
 
         return labeled_midi_dataset
