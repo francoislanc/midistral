@@ -1,7 +1,7 @@
 import re
 import tarfile
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
@@ -146,6 +146,13 @@ def generate_instruction(desc: AudioTextDescription):
         )
 
     return "\n".join(instructions)
+
+
+def generate_rag_instruction(abc_notations: List[str]):
+    return (
+        "Generate an ABC music notation inspired from these examples. Output only the generated ABC music notation. Keep similar MIDI program.\n"
+        + "\n".join(abc_notations)
+    )
 
 
 def add_instruction_data(r):

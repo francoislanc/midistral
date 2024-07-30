@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from midistral.types import AudioTextDescription
+
 
 class AbcGenerationBase(BaseModel):
     text_description: str
@@ -16,6 +18,22 @@ class AbcGenerationCreate(AbcGenerationBase):
 
 
 class AbcGeneration(AbcGenerationBase):
+    id: UUID
+
+    class Config:
+        from_attributes = True
+
+
+class AnnotatedAbcBase(BaseModel):
+    abc_notation: str
+    description: AudioTextDescription
+
+
+class AnnotatedAbcCreate(AnnotatedAbcBase):
+    pass
+
+
+class AnnotatedAbc(AnnotatedAbcBase):
     id: UUID
 
     class Config:

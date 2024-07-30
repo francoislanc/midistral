@@ -67,9 +67,21 @@
 
 	// Input Chip
 	let selectedValues: { [id: string]: string[] } = {
-		genre: ['classical'],
+		genre: [],
 		mood: [],
-		instruments: []
+		instruments: ['piano']
+	};
+
+	$: selectedValues && selectedValuesChanged();
+
+	const selectedValuesChanged = () => {
+		// Fix max number of selected items to 1 for genre and instruments
+		if (selectedValues.genre.length > 1) {
+			selectedValues.genre = selectedValues.genre.slice(1);
+		}
+		if (selectedValues.instruments.length > 1) {
+			selectedValues.instruments = selectedValues.instruments.slice(1);
+		}
 	};
 
 	let feedbackLiked = false;

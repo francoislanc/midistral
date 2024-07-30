@@ -1,41 +1,21 @@
 export const possibleDescriptionValues: { [id: string]: string[] } = {
-	genre: [
-		'ambient',
-		'classical',
-		'dance',
-		'electronic',
-		'experimental',
-		'pop',
-		'rock',
-		'soundtrack',
-		'techno'
-	],
-	mood: [
-		'action',
-		'corporate',
-		'dark',
-		'dream',
-		'emotional',
-		'energetic',
-		'epic',
-		'film',
-		'happy',
-		'inspiring',
-		'love',
-		'meditative',
-		'melodic',
-		'relaxing',
-		'retro',
-		'slow',
-		'space'
-	],
+	genre: ['electronic', 'classical', 'soundtrack', 'pop', 'experimental', 'ambient'],
+	mood: ['dark', 'melodic', 'film', 'energetic', 'happy', 'relaxing', 'emotional', 'slow', 'epic'],
 	instruments: [
-		'acoustic guitar',
-		'hammond organ',
 		'piano',
-		'synth bass',
+		'hammond organ',
 		'synth lead',
-		'vibraphone'
+		'vibraphone',
+		'clavinet',
+		'acoustic guitar',
+		'clarinet',
+		'bassoon',
+		'trumpet',
+		'synth bass',
+		'harmonica',
+		'ocarina',
+		'flute',
+		'violin'
 	]
 };
 

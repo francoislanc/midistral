@@ -1,12 +1,14 @@
 import datetime
 import uuid
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 
 from midistral.db import schemas
 from midistral.db.firestore.database import get_firestore_db
+from midistral.types import AudioTextDescription
 
 
 def create_abc_generation(
@@ -41,3 +43,120 @@ def get_abc_generation(abc_generation_id: UUID) -> Optional[schemas.AbcGeneratio
         return schemas.AbcGeneration.model_validate(doc.to_dict())
     else:
         return None
+
+
+def create_annotated_abc(
+    annotated_abc: schemas.AnnotatedAbcCreate,
+) -> schemas.AnnotatedAbc:
+
+    db: firestore.Client = get_firestore_db()
+    doc_id = str(uuid.uuid4())
+    doc_ref = db.collection("annotated_abcs").document(doc_id)
+
+    # need to use a map structure instead of array because we cannot currently have multiple arrayContains conditions in a single query
+    # https://stackoverflow.com/questions/54987399/firestore-search-array-contains-for-multiple-values
+
+    val = {**annotated_abc.model_dump(), "id": doc_id}
+    val["description"] = {
+        k: {ev: True for ev in v} for k, v in val["description"].items()
+    }
+    print(val)
+    doc_ref.set(val)
+    annotated_abc_firestore = doc_ref.get().to_dict()
+    print(annotated_abc_firestore)
+    annotated_abc_firestore["description"] = {
+        k: [ek for ek, ev in v.items()]
+        for k, v in annotated_abc_firestore["description"].items()
+    }
+    print(annotated_abc_firestore)
+    return schemas.AnnotatedAbc.model_validate(annotated_abc_firestore)
+
+
+def _get_annotated_abcs_from_description(
+    description: AudioTextDescription, limit: int
+) -> List[schemas.AnnotatedAbc]:
+    db: firestore.Client = get_firestore_db()
+    query = db.collection("annotated_abcs")
+
+    if len(description.instruments) > 0:
+        query = query.where(
+            filter=(
+                BaseCompositeFilter(
+                    "OR",
+                    [
+                        FieldFilter(f"description.instruments.{i}", "==", True)
+                        for i in description.instruments
+                    ],
+                )
+            )
+        )
+    if len(description.mood) > 0:
+        query = query.where(
+            filter=(
+                BaseCompositeFilter(
+                    "OR",
+                    [
+                        FieldFilter(f"description.mood.{i}", "==", True)
+                        for i in description.mood
+                    ],
+                )
+            )
+        )
+
+    if len(description.genre) > 0:
+        query = query.where(
+            filter=(
+                BaseCompositeFilter(
+                    "OR",
+                    [
+                        FieldFilter(f"description.genre.{i}", "==", True)
+                        for i in description.genre
+                    ],
+                )
+            )
+        )
+    query = query.limit(limit)
+
+    res = []
+    for d in query.stream():
+        reformatted_d = d.to_dict()
+        reformatted_d["description"] = {
+            k: [ek for ek, ev in v.items()]
+            for k, v in reformatted_d["description"].items()
+        }
+        res.append(schemas.AnnotatedAbc.model_validate(reformatted_d))
+
+    return res
+
+
+def get_annotated_abcs_from_description(
+    description: AudioTextDescription,
+    limit: int,
+    with_constraints_relaxation: bool = True,
+) -> List[schemas.AnnotatedAbc]:
+    res = _get_annotated_abcs_from_description(description, limit)
+    if with_constraints_relaxation:
+        if len(res) == 0:
+            # removing mood constraints
+            description_without_mood = AudioTextDescription(
+                instruments=description.instruments, genre=description.genre, mood=[]
+            )
+            res = _get_annotated_abcs_from_description(description_without_mood, limit)
+            if len(res) == 0:
+                # removing genre constraints
+                description_without_genre = AudioTextDescription(
+                    instruments=description.instruments, mood=description.mood, genre=[]
+                )
+                res = _get_annotated_abcs_from_description(
+                    description_without_genre, limit
+                )
+
+                if len(res) == 0:
+                    # removing both mood and genre constraints
+                    description_without_mood_without_genre = AudioTextDescription(
+                        instruments=description.instruments, mood=[], genre=[]
+                    )
+                    res = _get_annotated_abcs_from_description(
+                        description_without_mood_without_genre, limit
+                    )
+    return res

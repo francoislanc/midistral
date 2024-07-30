@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import UUID, Boolean, Column, DateTime, String, func
+from sqlalchemy import JSON, UUID, Boolean, Column, DateTime, String, func
 
 from midistral.db.sqlite.database import Base
 
@@ -16,3 +16,11 @@ class AbcGeneration(Base):
     abc_notation = Column(String)
     file_uuid = Column(String)
     liked = Column(Boolean, default=False)
+
+
+class AnnotatedAbc(Base):
+    __tablename__ = "annotatedabcs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    abc_notation = Column(String)
+    description = Column(JSON)

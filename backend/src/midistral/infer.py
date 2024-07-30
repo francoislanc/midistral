@@ -32,6 +32,7 @@ def run_inference_after_finetune(monitoring_output_file: str, content: str) -> s
 
 def run_inference(model: str, content: str) -> str:
     client = MistralClient(api_key=get_settings().MISTRAL_API_KEY)
+    # print(content)
     chat_response = client.chat(
         model=model,
         temperature=get_settings().LLM_TEMPERATURE,
