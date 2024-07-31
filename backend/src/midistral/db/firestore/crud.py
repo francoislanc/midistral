@@ -8,6 +8,7 @@ from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilte
 
 from midistral.db import schemas
 from midistral.db.firestore.database import get_firestore_db
+from midistral.db.firestore.utils import reformat_key
 from midistral.types import AudioTextDescription
 
 
@@ -22,7 +23,6 @@ def create_abc_generation(
         "id": doc_id,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
-    print(val)
     doc_ref.set(val)
     return schemas.AbcGeneration.model_validate(doc_ref.get().to_dict())
 
@@ -58,17 +58,15 @@ def create_annotated_abc(
 
     val = {**annotated_abc.model_dump(), "id": doc_id}
     val["description"] = {
-        k: {ev: True for ev in v} for k, v in val["description"].items()
+        k: {reformat_key(ev, True): True for ev in v}
+        for k, v in val["description"].items()
     }
-    print(val)
     doc_ref.set(val)
     annotated_abc_firestore = doc_ref.get().to_dict()
-    print(annotated_abc_firestore)
     annotated_abc_firestore["description"] = {
-        k: [ek for ek, ev in v.items()]
+        k: [reformat_key(ek, False) for ek, ev in v.items()]
         for k, v in annotated_abc_firestore["description"].items()
     }
-    print(annotated_abc_firestore)
     return schemas.AnnotatedAbc.model_validate(annotated_abc_firestore)
 
 
@@ -84,7 +82,11 @@ def _get_annotated_abcs_from_description(
                 BaseCompositeFilter(
                     "OR",
                     [
-                        FieldFilter(f"description.instruments.{i}", "==", True)
+                        FieldFilter(
+                            f"description.instruments.{reformat_key(i, True)}",
+                            "==",
+                            True,
+                        )
                         for i in description.instruments
                     ],
                 )
@@ -96,7 +98,9 @@ def _get_annotated_abcs_from_description(
                 BaseCompositeFilter(
                     "OR",
                     [
-                        FieldFilter(f"description.mood.{i}", "==", True)
+                        FieldFilter(
+                            f"description.mood.{reformat_key(i, True)}", "==", True
+                        )
                         for i in description.mood
                     ],
                 )
@@ -109,7 +113,9 @@ def _get_annotated_abcs_from_description(
                 BaseCompositeFilter(
                     "OR",
                     [
-                        FieldFilter(f"description.genre.{i}", "==", True)
+                        FieldFilter(
+                            f"description.genre.{reformat_key(i, True)}", "==", True
+                        )
                         for i in description.genre
                     ],
                 )
@@ -121,7 +127,7 @@ def _get_annotated_abcs_from_description(
     for d in query.stream():
         reformatted_d = d.to_dict()
         reformatted_d["description"] = {
-            k: [ek for ek, ev in v.items()]
+            k: [reformat_key(ek, False) for ek, ev in v.items()]
             for k, v in reformatted_d["description"].items()
         }
         res.append(schemas.AnnotatedAbc.model_validate(reformatted_d))
