@@ -1,17 +1,18 @@
 import re
+import shutil
 import tarfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
 from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
-from midistral.dataset_features import midi_abc_features
+from midistral.abc_utils import count_max_opened_parentheses
 from midistral.midi_utils import (
     get_abc_from_midi,
-    get_midi_channel_nums2,
+    get_midi_tracks_nums,
 )
 from midistral.types import AudioTextDescription
 
@@ -33,55 +34,21 @@ def extract_midicaps_files() -> None:
             for f in tqdm(iterable=files, total=len(files)):
                 tar.extract(path=DATA_FOLDER, member=f)
 
+    output_path_str = hf_hub_download(
+        repo_id="amaai-lab/MidiCaps",
+        filename="train.json",
+        repo_type="dataset",
+        revision="84d5b132f2776cc5276455fe90982b4ff768a6f5",
+    )
 
-def clean_midi_vgm_dataset(
-    labeled_midi_dataset_path: Path, keep_only_small_subset: bool
-) -> Optional[Dataset]:
-
-    vgm_json_p = Path("data/vgm.jsonl")
-    if vgm_json_p.exists():
-        labeled_midi_dataset_path.parent.mkdir(exist_ok=True, parents=True)
-        labeled_midi_dataset_df = pd.read_json(vgm_json_p, lines=True)
-        # remove confidence score or uneeded value
-        for k in ["genre", "mood", "tempo", "duration"]:
-            labeled_midi_dataset_df[k] = labeled_midi_dataset_df[k].map(lambda x: x[0])
-        labeled_midi_dataset_df = labeled_midi_dataset_df[
-            [
-                "location",
-                "genre",
-                "mood",
-                "key",
-                "time_signature",
-                "duration",
-                "instrument_summary",
-            ]
-        ]
-
-        if keep_only_small_subset:
-            labeled_midi_dataset_df = labeled_midi_dataset_df.head(500)
-        # create dataset
-        labeled_midi_dataset = Dataset.from_pandas(
-            labeled_midi_dataset_df, preserve_index=False
-        )
-
-        return labeled_midi_dataset
-    else:
-        return None
+    output_data_folder_path = DATA_FOLDER / "midicaps.jsonl"
+    shutil.copy(output_path_str, output_data_folder_path)
 
 
 def clean_labeled_midi_dataset(
-    labeled_midi_dataset_path: Path, keep_only_small_subset: bool
+    origin: str, labeled_midi_dataset_df: pd.DataFrame, keep_only_small_subset: bool
 ) -> Dataset:
-    labeled_midi_dataset_path.parent.mkdir(exist_ok=True, parents=True)
-    labeled_midi_dataset_df = pd.read_json(
-        hf_hub_download(
-            repo_id="amaai-lab/MidiCaps",
-            filename="captions_with_features.json",
-            repo_type="dataset",
-            revision="be875c9fa5f59b9f9a1b897d01507cc151fb8ca4",
-        ),
-        lines=True,
-    )
+
     labeled_midi_dataset_df = labeled_midi_dataset_df[
         [
             "location",
@@ -93,6 +60,7 @@ def clean_labeled_midi_dataset(
             "instrument_summary",
         ]
     ]
+    labeled_midi_dataset_df["origin"] = origin
 
     if keep_only_small_subset:
         labeled_midi_dataset_df = labeled_midi_dataset_df.head(500)
@@ -112,18 +80,12 @@ def prepare_midi_dataset(labeled_midi_dataset_path: Path, num_proc: int) -> Data
     midi_abc_dataset = labeled_midi_dataset.map(
         lambda x: {
             "abc_notation": get_abc_from_midi(DATA_FOLDER / x["location"]),
+            "midi_tracks_nums": get_midi_tracks_nums(DATA_FOLDER / x["location"]),
         },
         num_proc=num_proc,
         writer_batch_size=int(600 / num_proc),
     )
-    midi_abc_dataset = midi_abc_dataset.map(
-        lambda x: {
-            "midi_channel_nums": get_midi_channel_nums2(x["abc_notation"]),
-        },
-        features=midi_abc_features,
-        num_proc=num_proc,
-        writer_batch_size=int(600 / num_proc),
-    )
+
     midi_abc_dataset = midi_abc_dataset.filter(
         lambda x: x["abc_notation"] is not None,
     )
@@ -131,7 +93,7 @@ def prepare_midi_dataset(labeled_midi_dataset_path: Path, num_proc: int) -> Data
     return midi_abc_dataset
 
 
-def generate_instruction(desc: AudioTextDescription):
+def generate_instruction(desc: AudioTextDescription) -> str:
     instructions = []
 
     if len(desc.genre) > 0:
@@ -148,7 +110,7 @@ def generate_instruction(desc: AudioTextDescription):
     return "\n".join(instructions)
 
 
-def generate_rag_instruction(abc_notations: List[str]):
+def generate_rag_instruction(abc_notations: List[str]) -> str:
     return (
         "Generate an ABC music notation inspired from these examples. Output only the generated ABC music notation. Keep similar MIDI program.\n"
         + "\n".join(abc_notations)
@@ -177,6 +139,7 @@ def add_instruction_data(r):
 
 
 def prepare_dataset(keep_only_small_subset: bool) -> None:
+    data_origins = ["midicaps", "vgm", "irishman"]
     labeled_midi_dataset_path = OUTPUT_FOLDER / "datasets" / "labeled_midi_dataset"
     midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset"
     llm_finetuning_train_dataset_path = (
@@ -186,21 +149,25 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         OUTPUT_FOLDER / "llm_finetuning_dataset-eval.jsonl"
     )
 
-    extract_midicaps_files()
-
+    datasets: List[Dataset] = []
     if not labeled_midi_dataset_path.exists():
-        vgm_labeled_midi_dataset = clean_midi_vgm_dataset(
-            labeled_midi_dataset_path, keep_only_small_subset
-        )
-        midicaps_labeled_midi_dataset = clean_labeled_midi_dataset(
-            labeled_midi_dataset_path, keep_only_small_subset
-        )
-        if vgm_labeled_midi_dataset:
-            labeled_midi_dataset = concatenate_datasets(
-                [vgm_labeled_midi_dataset, midicaps_labeled_midi_dataset]
-            )
+        labeled_midi_dataset_path.parent.mkdir(exist_ok=True, parents=True)
+
+        for d in data_origins:
+            if d == "midicaps":
+                extract_midicaps_files()
+
+            labeled_file = DATA_FOLDER / f"{d}.jsonl"
+            if labeled_file.exists():
+                labeled_midi_dataset_df = pd.read_json(labeled_file, lines=True)
+                labeled_midi_dataset = clean_labeled_midi_dataset(
+                    d, labeled_midi_dataset_df, keep_only_small_subset
+                )
+                datasets.append(labeled_midi_dataset)
+        if len(datasets) == 1:
+            labeled_midi_dataset = datasets[0]
         else:
-            labeled_midi_dataset = midicaps_labeled_midi_dataset
+            labeled_midi_dataset = concatenate_datasets(datasets)
         labeled_midi_dataset.save_to_disk(labeled_midi_dataset_path)
 
     if not midi_abc_dataset_path.exists():
@@ -212,11 +179,9 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
 
     # subset only of the dataset to simplify the problem
     midi_abc_dataset_subset = midi_abc_dataset.filter(
-        lambda r: r["midi_channel_nums"] <= 2
-        and r["duration"] < 60
+        lambda r: r["duration"] < 60
         and r["duration"] > 2
-        and "[" not in r["abc_notation"]  # no chords
-        and "(" not in r["abc_notation"]  # no slurs and ties
+        and count_max_opened_parentheses(r["abc_notation"]) <= 1
     )
 
     llm_finetuning_dataset = midi_abc_dataset_subset.map(
@@ -232,7 +197,7 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         "time_signature",
         "duration",
         "instrument_summary",
-        "midi_channel_nums",
+        "midi_tracks_nums",
         "abc_notation",
     ]
 

@@ -1,11 +1,12 @@
 import logging
-import re
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
 
 import mido
+
+from midistral.abc_utils import clean_generated_abc
 
 
 def convert_midi_to_ogg(midi_path: Path, ogg_path: Path):
@@ -59,30 +60,6 @@ def convert_abc_to_midi(
         logging.debug(f"convert_abc_to_midi {abc_path} - {p.stderr}")
 
 
-def repl_midi_program(match_obj):
-    if match_obj.group(1):
-        return match_obj.group(1) + match_obj.group(2)
-    elif match_obj.group(3):
-        return ""
-
-
-def clean_generated_abc(abc: str):
-    abc = abc.replace("%***Missing time signature meta command in MIDI file\n", "")
-    abc = abc.replace("\n\n", "\n")
-    abc = re.sub(r"% Last note suggests (.*) mode tune\n", "", abc)
-    abc = re.sub(r"%%clef (.*)\n", "\n", abc)
-    abc = re.sub(r" % \d+ (.)*\n", "\n", abc)
-    abc = re.sub(r"(%%MIDI program \d+\n)(?=\1+)", "", abc)
-    abc = re.sub(r"T: \n", "", abc)
-    abc = re.sub(
-        r"(?P<voice>V:\d+\n)(?P<midi>%%MIDI program \d+\n)|(?P<midinovoice>%%MIDI program \d+\n)",
-        repl_midi_program,
-        abc,
-    )
-    abc = abc.replace("\n\n", "\n")
-    return abc
-
-
 def get_abc_from_midi(midi_path: Path) -> Optional[str]:
     abc = None
     with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as abc_fp:
@@ -119,21 +96,14 @@ def get_midi_and_ogg_from_abc(abc_notation: str) -> bytes:
     return midi, ogg
 
 
-def get_midi_channel_nums(midi_path: Path) -> int:
+def get_midi_tracks_nums(midi_path: Path) -> int:
     mid = mido.MidiFile(midi_path)
-    channels = set(
-        [
-            t.channel
-            for t in mid
-            if isinstance(t, mido.messages.messages.Message) and hasattr(t, "channel")
-        ]
-    )
-    return len(channels)
-
-
-def get_midi_channel_nums2(abc_notation: Optional[str]) -> int:
-    if abc_notation:
-        matches = re.findall(r"V:\d+\n", abc_notation)
-        return len(set(matches))
-    else:
-        return 0
+    num = 0
+    for t in mid.tracks:
+        for m in t:
+            if (
+                isinstance(m, mido.messages.messages.Message)
+                and m.type == "program_change"
+            ):
+                num += 1
+    return num

@@ -5,8 +5,9 @@ from pathlib import Path
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 
+from midistral.abc_utils import clean_generated_abc
 from midistral.config import get_settings
-from midistral.midi_utils import clean_generated_abc, get_midi_and_ogg_from_abc
+from midistral.midi_utils import get_midi_and_ogg_from_abc
 from midistral.storage.gcs import upload_file
 
 OUTPUT_FOLDER = Path(__file__).resolve().parent.parent.parent / "output"
