@@ -21,8 +21,12 @@ pydantic-settings = "^2.3.3"
 sqlalchemy = "^2.0.31"
 slowapi = "^0.1.9"
 google-cloud-firestore = "^2.16.1"
-
 google-cloud-storage = "^2.17.0"
+scikit-learn = "^1.5.1"
+essentia-tensorflow = "^2.1b6.dev1177"
+numpy = "^1.20"
+chord-extractor-vamphost = {git = "https://github.com/Franky1/chord-extractor.git"}
+
 [tool.poetry.dev-dependencies]
 ruff = "^0.4.9"
 black = "^24.4.2"
