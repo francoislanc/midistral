@@ -7,6 +7,7 @@ from typing import List
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
 from huggingface_hub import hf_hub_download
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from midistral.abc_utils import count_max_opened_parentheses
@@ -142,6 +143,8 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
     data_origins = ["midicaps", "vgm", "irishman"]
     labeled_midi_dataset_path = OUTPUT_FOLDER / "datasets" / "labeled_midi_dataset"
     midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset"
+    train_midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset-train"
+    test_midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset-test"
     llm_finetuning_train_dataset_path = (
         OUTPUT_FOLDER / "llm_finetuning_dataset-train.jsonl"
     )
@@ -184,11 +187,47 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         and count_max_opened_parentheses(r["abc_notation"]) <= 1
     )
 
-    llm_finetuning_dataset = midi_abc_dataset_subset.map(
+    # split data with stratify option (to balance genre, mood, and instrument in train and test set)
+    if not train_midi_abc_dataset_path.exists():
+        df = midi_abc_dataset_subset.to_pandas()
+        df["instrument_summary_str"] = df["instrument_summary"].apply(
+            lambda x: "-".join(sorted(x[:2]))
+        )
+        df["genre_str"] = df["genre"].apply(lambda x: "-".join(sorted(x[:2])))
+        df["mood_str"] = df["mood"].apply(lambda x: "-".join(sorted(x[:2])))
+
+        value_counts = df[
+            ["instrument_summary_str", "genre_str", "mood_str"]
+        ].value_counts()
+        index_to_remove = value_counts[value_counts <= 2]
+        df = df[
+            ~df.set_index(
+                ["instrument_summary_str", "genre_str", "mood_str"]
+            ).index.isin(index_to_remove.index)
+        ]
+        df_train, df_test = train_test_split(
+            df,
+            test_size=0.04,
+            random_state=42,
+            stratify=df[["instrument_summary_str", "genre_str", "mood_str"]],
+        )
+
+        train_dataset = midi_abc_dataset_subset.select(df_train.index)
+        train_dataset.save_to_disk(train_midi_abc_dataset_path)
+        test_dataset = midi_abc_dataset_subset.select(df_test.index)
+        test_dataset.save_to_disk(test_midi_abc_dataset_path)
+    else:
+        train_dataset = load_from_disk(train_midi_abc_dataset_path)
+        test_dataset = load_from_disk(test_midi_abc_dataset_path)
+
+    train_llm_finetuning_dataset = train_dataset.map(
         add_instruction_data,
     )
 
-    splitted_dataset = llm_finetuning_dataset.train_test_split(test_size=0.04, seed=42)
+    test_llm_finetuning_dataset = test_dataset.map(
+        add_instruction_data,
+    )
+
     unused_columns = [
         "location",
         "genre",
@@ -201,8 +240,8 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         "abc_notation",
     ]
 
-    train_df = splitted_dataset["train"].remove_columns(unused_columns).to_pandas()
-    test_df = splitted_dataset["test"].remove_columns(unused_columns).to_pandas()
+    train_df = train_llm_finetuning_dataset.remove_columns(unused_columns).to_pandas()
+    test_df = test_llm_finetuning_dataset.remove_columns(unused_columns).to_pandas()
 
     # remove escaped slash (\/) and continuation character (\\\n)
     formatted_json_train = train_df.to_json(orient="records", lines=True)
