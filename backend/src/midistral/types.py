@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List
 
 from pydantic import BaseModel
@@ -16,6 +17,14 @@ class AudioTextDescription(BaseModel):
 
 class ABCNotation(BaseModel):
     text: str
+
+
+class InferenceApproach(str, Enum):
+    PROMPT_ONLY = "PROMPT_ONLY"
+    DIRECT_FINETUNED = "DIRECT_FINETUNED"
+    TWO_STEPS_FINETUNED = "TWO_STEPS_FINETUNED"
+    RAG = "RAG"
+    RAG_FINETUNED = "RAG_FINETUNED"
 
 
 GENRE_VALUES: List[str] = [

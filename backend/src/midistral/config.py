@@ -1,7 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+MIDISTRAL_FOLDER = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -16,7 +19,7 @@ class Settings(BaseSettings):
     RAG_MODEL_NAME: str
     FRONT_END_ORIGIN: str
 
-    DB_PATH: str = "./sql_app.db"
+    DB_PATH: str = str(MIDISTRAL_FOLDER / "sql_app.db")
     USE_FIRESTORE_DB: bool = False
     WITH_RAG: bool = True
     DB_LIMIT: int = 5
@@ -26,7 +29,7 @@ class Settings(BaseSettings):
 
     APP_VERSION: str = "30.07.1"
 
-    model_config = SettingsConfigDict(env_file="local.env")
+    model_config = SettingsConfigDict(env_file=str(MIDISTRAL_FOLDER / "local.env"))
 
 
 @lru_cache

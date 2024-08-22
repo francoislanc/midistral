@@ -214,7 +214,7 @@ def get_instruments(midi_file_path: Path):
     sorted_instrument_list = []
     how_many = min(5, len(set(instrument_names)))
     if how_many == 0:
-        return []
+        return [], []
     add_drums = False
     if 9 not in instrument_channels:
         for rr in new_dict:
@@ -234,7 +234,7 @@ def get_instruments(midi_file_path: Path):
         except Exception as e:
             print(e)
             print(midi_file_path)
-            return sorted_instrument_list
+            return sorted_instrument_list, []
 
     out_inst_list = []
     for inst in sorted_instrument_list:
@@ -383,6 +383,6 @@ def get_instrument_name(number: int) -> Optional[str]:
         128: "Drums",
     }
     if number in instruments_mapping:
-        return instruments_mapping[number]
+        return instruments_mapping[number].lower()
     else:
         return None

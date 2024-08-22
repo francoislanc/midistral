@@ -1,4 +1,3 @@
-import random
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,14 +8,16 @@ from slowapi.errors import RateLimitExceeded
 
 from midistral.config import get_settings
 from midistral.db import schemas
-from midistral.db.firestore import crud as firestore_crud
-from midistral.db.sqlite import crud as sqlite_crud
+from midistral.db.crud import get_crud
 from midistral.db.sqlite import models
 from midistral.db.sqlite.database import engine
-from midistral.infer import generate_midi_and_ogg_audio, get_path, run_inference
-from midistral.prepare_dataset import generate_instruction, generate_rag_instruction
+from midistral.infer import (
+    generate_abc_notation,
+    generate_midi_and_ogg_audio,
+    get_path,
+)
 from midistral.storage.gcs import download_file
-from midistral.types import AudioTextDescription
+from midistral.types import AudioTextDescription, InferenceApproach
 
 if not get_settings().USE_FIRESTORE_DB:
     models.Base.metadata.create_all(bind=engine)
@@ -48,30 +49,19 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-def get_crud():
-    if get_settings().USE_FIRESTORE_DB:
-        return firestore_crud
-    else:
-        return sqlite_crud
-
-
-def generate_abc_notation(desc: AudioTextDescription):
+@app.post("/generate")
+@limiter.limit("5/minute")
+async def limited_generate_abc_notation(request: Request):
+    req_obj = await request.json()
+    des = AudioTextDescription.model_validate(req_obj)
+    des.filter_values()
 
     if get_settings().WITH_RAG:
-        annotated_abcs = get_crud().get_annotated_abcs_from_description(
-            desc, get_settings().DB_LIMIT
-        )
-        random.shuffle(annotated_abcs)
-        abc_notations = [
-            e.abc_notation for e in annotated_abcs[: get_settings().RETRIEVED_LIMIT]
-        ]
-        text_description = generate_rag_instruction(abc_notations)
-        model = get_settings().RAG_MODEL_NAME
-        abc_notation_text = run_inference(model, text_description)
+        approach = InferenceApproach.RAG
     else:
-        text_description = generate_instruction(desc)
-        model = get_settings().FINETUNED_MODEL_NAME
-        abc_notation_text = run_inference(model, text_description)
+        approach = InferenceApproach.DIRECT_FINETUNED
+
+    abc_notation_text, text_description = generate_abc_notation(des, approach)
 
     if len(text_description) > 0:
         # abc_notation_text = "X: 1\nM: 4/4\nL: 1/8\nQ:1/4=120\nK:D\nV:1\n%%MIDI program 0\n G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|\n"
@@ -95,15 +85,6 @@ def generate_abc_notation(desc: AudioTextDescription):
         raise HTTPException(
             status_code=400, detail="Generation failed : no selected items"
         )
-
-
-@app.post("/generate")
-@limiter.limit("5/minute")
-async def limited_generate_abc_notation(request: Request):
-    req_obj = await request.json()
-    des = AudioTextDescription.model_validate(req_obj)
-    des.filter_values()
-    return generate_abc_notation(des)
 
 
 @app.post("/feedback")

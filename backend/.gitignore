@@ -162,4 +162,5 @@ cython_debug/
 
 data/
 output/
+models/
 gcp-service.yaml
