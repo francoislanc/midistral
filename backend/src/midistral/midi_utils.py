@@ -111,10 +111,18 @@ def get_midi_tracks_nums(midi_path: Path) -> int:
 def get_duration(midi_path: Path) -> int:
     try:
         midi = mido.MidiFile(midi_path)
-        return midi.length
+        return int(midi.length)
     except Exception:
         return -1
 
+def get_duration_caps(duration: Optional[int]) -> str:
+    if duration:
+        dur_marks = np.array((30, 120, 300))
+        dur_caps = ["Short fragment", "Short song", "Song", "Long piece"]
+        index = int(np.sum(duration > dur_marks))
+        return dur_caps[index]
+    else:
+        return ""
 
 def get_tempo(midi_path: Path) -> Optional[int]:
     midi = mido.MidiFile(midi_path)
@@ -122,11 +130,19 @@ def get_tempo(midi_path: Path) -> Optional[int]:
         for msg in midi:
             if msg.type == "set_tempo":
                 tempo = mido.tempo2bpm(msg.tempo)
-                return tempo
+                return int(tempo)
     except Exception:
         return None
     return None
 
+def get_tempo_caps(tempo: Optional[int]) -> str:
+    if tempo:
+        tempo_marks = np.array((80, 120, 160))
+        tempo_caps = ["Slow", "Moderate tempo", "Fast", "Very fast"]
+        index = int(np.sum(tempo > tempo_marks))
+        return tempo_caps[index]
+    else:
+        return ""
 
 def read_midi(midi_path: Path):
     mf = music21midi.MidiFile()

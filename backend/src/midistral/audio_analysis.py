@@ -274,8 +274,11 @@ instruments_classes = [
 
 
 def download_models():
+    MODEL_FOLDER.mkdir(exist_ok=True, parents=True)
+
     # embeddings
     model_path = MODEL_FOLDER / "discogs-effnet-bs64-1.pb"
+    
     if not model_path.exists():
         urllib.request.urlretrieve(
             "https://essentia.upf.edu/models/music-style-classification/discogs-effnet/discogs-effnet-bs64-1.pb",
@@ -375,7 +378,7 @@ def get_mtg_tags(embeddings, tag_model, tag_json, max_num_tags=5, tag_threshold=
 def get_chords(wav_audio_path: Path):
     chord_estimator = get_chord_estimator()
     chords = chord_estimator.extract(str(wav_audio_path))
-    chords_out = [(x.chord, x.timestamp) for x in chords[1:-1]]
+    chords_out = [(x.chord, round(x.timestamp, 4)) for x in chords[1:-1]]
 
     # chord summary
     ch_name = []
@@ -393,7 +396,7 @@ def get_chords(wav_audio_path: Path):
             if final_seq[0] == final_seq[2] and final_seq[1] == final_seq[3]:
                 final_seq = final_seq[0:2]
     chord_summary = [final_seq, final_count]
-    return chords_out, chord_summary[0]
+    return chords_out, chord_summary[0], chord_summary[1]
 
 
 def get_mood_and_genre(wav_audio_path: Path):
