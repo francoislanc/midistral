@@ -27,6 +27,7 @@ essentia-tensorflow = "^2.1b6.dev1177"
 numpy = "^1.20"
 chord-extractor-vamphost = {git = "https://github.com/Franky1/chord-extractor.git"}
 
+music21 = "^9.1.0"
 [tool.poetry.group.dev.dependencies]
 notebook = "^7.2.1"
 ruff = "^0.4.9"

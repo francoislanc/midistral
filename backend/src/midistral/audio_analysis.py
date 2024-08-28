@@ -278,7 +278,7 @@ def download_models():
 
     # embeddings
     model_path = MODEL_FOLDER / "discogs-effnet-bs64-1.pb"
-    
+
     if not model_path.exists():
         urllib.request.urlretrieve(
             "https://essentia.upf.edu/models/music-style-classification/discogs-effnet/discogs-effnet-bs64-1.pb",

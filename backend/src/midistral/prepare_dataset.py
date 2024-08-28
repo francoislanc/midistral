@@ -1,8 +1,9 @@
+import json
 import re
 import shutil
 import tarfile
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
@@ -11,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from midistral.abc_utils import count_max_opened_parentheses
+from midistral.dataset_features import midi_features
 from midistral.midi_utils import (
     get_abc_from_midi,
     get_midi_tracks_nums,
@@ -47,7 +49,10 @@ def extract_midicaps_files() -> None:
 
 
 def clean_labeled_midi_dataset(
-    origin: str, labeled_midi_dataset_df: pd.DataFrame, keep_only_small_subset: bool
+    origin: str,
+    labeled_midi_dataset_df: pd.DataFrame,
+    keep_only_small_subset: bool,
+    num_proc: int,
 ) -> Dataset:
 
     labeled_midi_dataset_df = labeled_midi_dataset_df[
@@ -57,18 +62,34 @@ def clean_labeled_midi_dataset(
             "mood",
             "key",
             "time_signature",
+            "tempo",
             "duration",
             "instrument_summary",
+            "instrument_numbers_sorted",
+            "chord_summary",
         ]
     ]
-    labeled_midi_dataset_df["origin"] = origin
 
+    labeled_midi_dataset_df["origin"] = origin
     if keep_only_small_subset:
         labeled_midi_dataset_df = labeled_midi_dataset_df.head(500)
     # create dataset
     labeled_midi_dataset = Dataset.from_pandas(
         labeled_midi_dataset_df, preserve_index=False
     )
+    labeled_midi_dataset = labeled_midi_dataset.filter(
+        lambda r: r["tempo"] is not None and r["chord_summary"] is not None
+    )
+    # labeled_midi_dataset = labeled_midi_dataset.map(
+    #     lambda x: {
+    #         "tempo": int(x["tempo"]),
+    #     },
+    #     num_proc=num_proc,
+    #     writer_batch_size=int(600 / num_proc),
+    #     load_from_cache_file=False
+    # )
+    labeled_midi_dataset = labeled_midi_dataset.cast(midi_features)
+    labeled_midi_dataset.to_csv(f"toto_{origin}.csv")
 
     return labeled_midi_dataset
 
@@ -95,20 +116,7 @@ def prepare_midi_dataset(labeled_midi_dataset_path: Path, num_proc: int) -> Data
 
 
 def generate_instruction(desc: AudioTextDescription) -> str:
-    instructions = []
-
-    if len(desc.genre) > 0:
-        instructions.append("genre : " + ", ".join([g.lower() for g in desc.genre]))
-
-    if len(desc.mood) > 0:
-        instructions.append("mood : " + ", ".join([g.lower() for g in desc.mood]))
-
-    if len(desc.instruments) > 0:
-        instructions.append(
-            "instruments : " + ", ".join([x.lower() for x in desc.instruments])
-        )
-
-    return "\n".join(instructions)
+    return desc.model_dump_json()
 
 
 def generate_rag_instruction(abc_notations: List[str]) -> str:
@@ -118,12 +126,26 @@ def generate_rag_instruction(abc_notations: List[str]) -> str:
     )
 
 
-def add_instruction_data(r):
+def get_instruction_data(r, with_intermediate_step: bool = False) -> Dict:
 
     desc = AudioTextDescription(
         genre=r["genre"], mood=r["mood"], instruments=r["instrument_summary"]
     )
     text_instruction = generate_instruction(desc)
+    if with_intermediate_step:
+        generation = {
+            "tempo": r["tempo"],
+            "time_signature": r["time_signature"],
+            "instruments": list(set(r["instrument_numbers_sorted"])),
+            "chord_summary": r["chord_summary"],
+            "abc_notation": r["abc_notation"],
+        }
+    else:
+        generation = {"abc_notation": r["abc_notation"]}
+
+    # remove escaped slash (\/) and continuation character (\\\n)
+    formatted_generation = re.sub(r"\\/", "/", json.dumps(generation))
+    formatted_generation = re.sub(r"\\\\\\n", "", formatted_generation).strip()
 
     return {
         "messages": [
@@ -133,7 +155,7 @@ def add_instruction_data(r):
             },
             {
                 "role": "assistant",
-                "content": f"{r['abc_notation']}",
+                "content": formatted_generation,
             },
         ]
     }
@@ -164,8 +186,9 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
             if labeled_file.exists():
                 labeled_midi_dataset_df = pd.read_json(labeled_file, lines=True)
                 labeled_midi_dataset = clean_labeled_midi_dataset(
-                    d, labeled_midi_dataset_df, keep_only_small_subset
+                    d, labeled_midi_dataset_df, keep_only_small_subset, 5
                 )
+                print(labeled_midi_dataset)
                 datasets.append(labeled_midi_dataset)
         if len(datasets) == 1:
             labeled_midi_dataset = datasets[0]
@@ -183,33 +206,39 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
     # subset only of the dataset to simplify the problem
     midi_abc_dataset_subset = midi_abc_dataset.filter(
         lambda r: r["duration"] < 60
-        and r["duration"] > 2
+        and r["duration"] > 5
         and count_max_opened_parentheses(r["abc_notation"]) <= 1
+        and len(r["instrument_summary"]) <= 2
+    )
+    midi_abc_dataset_subset = midi_abc_dataset_subset.map(
+        lambda r: {"mood": r["mood"][:2]}
     )
 
     # split data with stratify option (to balance genre, mood, and instrument in train and test set)
     if not train_midi_abc_dataset_path.exists():
         df = midi_abc_dataset_subset.to_pandas()
         df["instrument_summary_str"] = df["instrument_summary"].apply(
-            lambda x: "-".join(sorted(x[:2]))
+            lambda x: "-".join(sorted(x))
         )
-        df["genre_str"] = df["genre"].apply(lambda x: "-".join(sorted(x[:2])))
-        df["mood_str"] = df["mood"].apply(lambda x: "-".join(sorted(x[:2])))
+        df["genre_str"] = df["genre"].apply(lambda x: "-".join(sorted(x)))
+        df["mood_str"] = df["mood"].apply(lambda x: "-".join(sorted(x)))
 
-        value_counts = df[
-            ["instrument_summary_str", "genre_str", "mood_str"]
-        ].value_counts()
-        index_to_remove = value_counts[value_counts <= 2]
+        value_counts = df[["genre_str", "mood_str"]].value_counts()
+
+        if keep_only_small_subset:
+            index_to_remove = value_counts[value_counts <= 20]
+        else:
+            index_to_remove = value_counts[value_counts <= 400]
+
         df = df[
-            ~df.set_index(
-                ["instrument_summary_str", "genre_str", "mood_str"]
-            ).index.isin(index_to_remove.index)
+            ~df.set_index(["genre_str", "mood_str"]).index.isin(index_to_remove.index)
         ]
+
         df_train, df_test = train_test_split(
             df,
             test_size=0.04,
             random_state=42,
-            stratify=df[["instrument_summary_str", "genre_str", "mood_str"]],
+            stratify=df[["genre_str", "mood_str"]],
         )
 
         train_dataset = midi_abc_dataset_subset.select(df_train.index)
@@ -220,40 +249,18 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         train_dataset = load_from_disk(train_midi_abc_dataset_path)
         test_dataset = load_from_disk(test_midi_abc_dataset_path)
 
-    train_llm_finetuning_dataset = train_dataset.map(
-        add_instruction_data,
-    )
+    print(train_dataset)
+    with llm_finetuning_train_dataset_path.open("w") as f:
+        for r in train_dataset:
+            instruct = get_instruction_data(r, with_intermediate_step=True)
+            f.write(f"{json.dumps(instruct)}\n")
+            f.flush()
 
-    test_llm_finetuning_dataset = test_dataset.map(
-        add_instruction_data,
-    )
-
-    unused_columns = [
-        "location",
-        "genre",
-        "mood",
-        "key",
-        "time_signature",
-        "duration",
-        "instrument_summary",
-        "midi_tracks_nums",
-        "abc_notation",
-    ]
-
-    train_df = train_llm_finetuning_dataset.remove_columns(unused_columns).to_pandas()
-    test_df = test_llm_finetuning_dataset.remove_columns(unused_columns).to_pandas()
-
-    # remove escaped slash (\/) and continuation character (\\\n)
-    formatted_json_train = train_df.to_json(orient="records", lines=True)
-    formatted_json_train = re.sub(r"\\/", "/", formatted_json_train)
-    formatted_json_train = re.sub(r"\\\\\\n", "", formatted_json_train).strip()
-
-    formatted_json_eval = test_df.to_json(orient="records", lines=True)
-    formatted_json_eval = re.sub(r"\\/", "/", formatted_json_eval)
-    formatted_json_eval = re.sub(r"\\\\\\n", "", formatted_json_eval).strip()
-
-    print(formatted_json_train, file=llm_finetuning_train_dataset_path.open("w"))
-    print(formatted_json_eval, file=llm_finetuning_eval_dataset_path.open("w"))
+    with llm_finetuning_eval_dataset_path.open("w") as f:
+        for r in test_dataset:
+            instruct = get_instruction_data(r, with_intermediate_step=True)
+            f.write(f"{json.dumps(instruct)}\n")
+            f.flush()
 
     # generate audio file for test dataset
     # for r in splitted_dataset["train"].take(11):
