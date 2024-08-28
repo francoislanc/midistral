@@ -80,16 +80,7 @@ def clean_labeled_midi_dataset(
     labeled_midi_dataset = labeled_midi_dataset.filter(
         lambda r: r["tempo"] is not None and r["chord_summary"] is not None
     )
-    # labeled_midi_dataset = labeled_midi_dataset.map(
-    #     lambda x: {
-    #         "tempo": int(x["tempo"]),
-    #     },
-    #     num_proc=num_proc,
-    #     writer_batch_size=int(600 / num_proc),
-    #     load_from_cache_file=False
-    # )
     labeled_midi_dataset = labeled_midi_dataset.cast(midi_features)
-    labeled_midi_dataset.to_csv(f"toto_{origin}.csv")
 
     return labeled_midi_dataset
 
