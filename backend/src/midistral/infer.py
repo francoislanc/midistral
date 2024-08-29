@@ -3,8 +3,7 @@ import random
 import uuid
 from pathlib import Path
 
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai import Mistral
 
 from midistral.abc_utils import clean_generated_abc
 from midistral.config import get_settings
@@ -30,18 +29,20 @@ def run_inference_after_finetune(monitoring_output_file: str, content: str) -> s
             monitoring_output["fine_tuned_model"]
             and monitoring_output["status"] == "SUCCESS"
         ):
-            return run_inference(monitoring_output["fine_tuned_model"], content)
+            return run_inference(
+                monitoring_output["fine_tuned_model"], json.dumps(content)
+            )
         else:
             raise Exception("Finetuned model does not exist")
 
 
 def run_inference(model: str, content: str) -> str:
-    client = MistralClient(api_key=get_settings().MISTRAL_API_KEY)
+    client = Mistral(api_key=get_settings().MISTRAL_API_KEY)
     # print(content)
-    chat_response = client.chat(
+    chat_response = client.chat.complete(
         model=model,
         temperature=get_settings().LLM_TEMPERATURE,
-        messages=[ChatMessage(role="user", content=content)],
+        messages=[{"role": "user", "content": content}],
         max_tokens=get_settings().LLM_MAX_TOKEN,
     )
     # print(chat_response)
@@ -91,15 +92,3 @@ def generate_midi_and_ogg_audio(abc_notation: str) -> id:
         if get_settings().GCP_PROJECT:
             upload_file(p)
     return file_uuid
-
-
-def run_streaming_inference(model: str, content: str) -> None:
-    client = MistralClient(api_key=get_settings().MISTRAL_API_KEY)
-    for chunk in client.chat_stream(
-        model=model,
-        temperature=get_settings().LLM_TEMPERATURE,
-        messages=[ChatMessage(role="user", content=content)],
-        max_tokens=get_settings().LLM_MAX_TOKEN,
-    ):
-        delta_content = clean_generated_abc(chunk.choices[0].delta.content)
-        print(delta_content, end="")

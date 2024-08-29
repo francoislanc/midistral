@@ -1,4 +1,5 @@
 import json
+from typing import List
 import urllib.request
 from collections import Counter
 from functools import lru_cache
@@ -109,6 +110,106 @@ genre_classes = [
     "worldfusion",
 ]
 
+decades = ["60s", "70s", "80s", "90s"]
+jazz_related = ["acidjazz", "jazz", "jazzfusion", "swing"]
+rock_related = [
+    "alternative",
+    "alternativerock",
+    "classicrock",
+    "grunge",
+    "hardrock",
+    "metal",
+    "poprock",
+    "postrock",
+    "progressive",
+    "psychedelic",
+    "punkrock",
+    "rock",
+    "rocknroll",
+]
+electronic_dance = [
+    "ambient",
+    "atmospheric",
+    "breakbeat",
+    "chillout",
+    "club",
+    "dance",
+    "darkambient",
+    "darkwave",
+    "deephouse",
+    "disco",
+    "downtempo",
+    "drumnbass",
+    "dub",
+    "dubstep",
+    "edm",
+    "electronic",
+    "electronica",
+    "electropop",
+    "eurodance",
+    "experimental",
+    "groove",
+    "hard",
+    "house",
+    "idm",
+    "minimal",
+    "newwave",
+    "techno",
+    "trance",
+    "triphop",
+]
+folk_world = ["celtic", "ethno", "folk", "latin", "world", "worldfusion"]
+classical_instrumental = [
+    "choir",
+    "classical",
+    "instrumentalpop",
+    "instrumentalrock",
+    "medieval",
+    "orchestral",
+    "symphonic",
+]
+pop_related = ["pop", "popfolk", "singersongwriter", "synthpop"]
+blues_related = ["blues", "bluesrock"]
+hiphop_related = ["hiphop", "rap", "rnb"]
+other_genres = [
+    "bossanova",
+    "chanson",
+    "contemporary",
+    "country",
+    "easylistening",
+    "funk",
+    "fusion",
+    "improvisation",
+    "indie",
+    "industrial",
+    "lounge",
+    "newage",
+    "reggae",
+    "soul",
+    "soundtrack",
+]
+
+
+def get_simplified_genres(genres: List[str]) -> List[str]:
+    simplified_genres = set()
+    for g in genres:
+        if g in rock_related:
+            simplified_genres.add("rock")
+        elif g in electronic_dance:
+            simplified_genres.add("electronic_dance")
+        elif g in classical_instrumental:
+            simplified_genres.add("classical")
+        elif g in folk_world:
+            simplified_genres.add("folk")
+        elif g in pop_related:
+            simplified_genres.add("pop")
+        elif g in blues_related:
+            simplified_genres.add("blues")
+        elif g in hiphop_related:
+            simplified_genres.add("hiphop")
+    return list(simplified_genres)
+
+
 mood_classes = [
     "action",
     "adventure",
@@ -167,6 +268,88 @@ mood_classes = [
     "upbeat",
     "uplifting",
 ]
+
+# Define some categories
+positive_happy_moods = [
+    "happy",
+    "fun",
+    "funny",
+    "groovy",
+    "hopeful",
+    "inspiring",
+    "love",
+    "positive",
+    "powerful",
+    "romantic",
+    "sexy",
+    "upbeat",
+    "uplifting",
+]
+energetic_active_moods = [
+    "action",
+    "adventure",
+    "energetic",
+    "epic",
+    "fast",
+    "game",
+    "sport",
+    "summer",
+]
+calm_relaxing_moods = [
+    "background",
+    "calm",
+    "meditative",
+    "relaxing",
+    "soft",
+    "soundscape",
+]
+emotional_melancholic_moods = [
+    "ballad",
+    "drama",
+    "dramatic",
+    "emotional",
+    "melancholic",
+    "sad",
+]
+motivational_corporate_moods = ["commercial", "corporate", "motivational"]
+nature_environmental_moods = ["nature", "space"]
+festive_seasonal_moods = ["christmas", "holiday"]
+entertainment_media_moods = [
+    "advertising",
+    "documentary",
+    "film",
+    "movie",
+    "trailer",
+    "travel",
+]
+other_moods = [
+    "children",
+    "cool",
+    "dark",
+    "deep",
+    "dream",
+    "heavy",
+    "melodic",
+    "party",
+    "retro",
+    "slow",
+]
+
+
+def get_simplified_moods(moods: List[str]) -> List[str]:
+    simplified_moods = set()
+    for m in moods:
+        if m in positive_happy_moods:
+            simplified_moods.add("positive")
+        elif m in energetic_active_moods:
+            simplified_moods.add("energetic")
+        elif m in calm_relaxing_moods:
+            simplified_moods.add("calm")
+        elif m in emotional_melancholic_moods:
+            simplified_moods.add("emotional")
+
+    return list(simplified_moods)
+
 
 instruments_classes = [
     "accordion",

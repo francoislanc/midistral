@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Dict
 
-from mistralai.client import MistralClient
+from mistralai import Mistral
 
 from midistral.config import get_settings
 
@@ -14,16 +14,22 @@ def upload_files(
     chat_train_dataset_path: Path, chat_eval_dataset_path: Path
 ) -> Dict[str, Dict]:
     mistral_api_key = get_settings().MISTRAL_API_KEY
-    client = MistralClient(api_key=mistral_api_key)
+    client = Mistral(api_key=mistral_api_key)
 
     with chat_train_dataset_path.open("rb") as f_train, chat_eval_dataset_path.open(
         "rb"
     ) as f_eval:
-        train_file_uploaded_info = client.files.create(
-            file=(chat_train_dataset_path.name, f_train)
+        train_file_uploaded_info = client.files.upload(
+            file={
+                "file_name": chat_train_dataset_path.name,
+                "content": f_train,
+            }
         )
-        eval_file_uploaded_info = client.files.create(
-            file=(chat_eval_dataset_path.name, f_eval)
+        eval_file_uploaded_info = client.files.upload(
+            file={
+                "file_name": chat_eval_dataset_path.name,
+                "content": f_eval,
+            }
         )
 
         output = {

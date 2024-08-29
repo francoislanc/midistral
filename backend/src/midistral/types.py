@@ -7,7 +7,7 @@ from pydantic import BaseModel
 class AudioTextDescription(BaseModel):
     genre: List[str]
     mood: List[str]
-    instruments: List[str]
+    instruments: List[int]
 
     def filter_values(self):
         self.genre = [g for g in self.genre if g in GENRE_VALUES]

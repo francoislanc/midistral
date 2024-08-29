@@ -5,13 +5,13 @@ import tarfile
 from pathlib import Path
 from typing import Dict, List
 
+from midistral.audio_analysis import get_simplified_genres, get_simplified_moods
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
 from huggingface_hub import hf_hub_download
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from midistral.abc_utils import count_max_opened_parentheses
 from midistral.dataset_features import midi_features
 from midistral.midi_utils import (
     get_abc_from_midi,
@@ -120,22 +120,15 @@ def generate_rag_instruction(abc_notations: List[str]) -> str:
 def get_instruction_data(r, with_intermediate_step: bool = False) -> Dict:
 
     desc = AudioTextDescription(
-        genre=r["genre"], mood=r["mood"], instruments=r["instrument_summary"]
+        genre=r["genre"],
+        mood=r["mood"],
+        instruments=list(set(r["instrument_numbers_sorted"])),
     )
     text_instruction = generate_instruction(desc)
-    if with_intermediate_step:
-        generation = {
-            "tempo": r["tempo"],
-            "time_signature": r["time_signature"],
-            "instruments": list(set(r["instrument_numbers_sorted"])),
-            "chord_summary": r["chord_summary"],
-            "abc_notation": r["abc_notation"],
-        }
-    else:
-        generation = {"abc_notation": r["abc_notation"]}
+    generation = r["abc_notation"]
 
     # remove escaped slash (\/) and continuation character (\\\n)
-    formatted_generation = re.sub(r"\\/", "/", json.dumps(generation))
+    formatted_generation = re.sub(r"\\/", "/", generation)
     formatted_generation = re.sub(r"\\\\\\n", "", formatted_generation).strip()
 
     return {
@@ -198,11 +191,19 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
     midi_abc_dataset_subset = midi_abc_dataset.filter(
         lambda r: r["duration"] < 60
         and r["duration"] > 5
-        and count_max_opened_parentheses(r["abc_notation"]) <= 1
-        and len(r["instrument_summary"]) <= 2
+        and "[" not in r["abc_notation"]
+        and "(" not in r["abc_notation"]
+        and "%%MIDI program" in r["abc_notation"]
+        and len(r["instrument_summary"]) > 0
     )
+
+    # simplified mood and genre tags
     midi_abc_dataset_subset = midi_abc_dataset_subset.map(
-        lambda r: {"mood": r["mood"][:2]}
+        lambda r: {
+            "genre": get_simplified_genres(r["genre"][:2]),
+            "mood": get_simplified_moods(r["mood"]),
+            "instrument_summary": [i.lower() for i in r["instrument_summary"]],
+        }
     )
 
     # split data with stratify option (to balance genre, mood, and instrument in train and test set)
@@ -213,18 +214,26 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         )
         df["genre_str"] = df["genre"].apply(lambda x: "-".join(sorted(x)))
         df["mood_str"] = df["mood"].apply(lambda x: "-".join(sorted(x)))
+        df["genre_mood_str"] = df["genre_str"] + "_" + df["mood_str"]
 
-        value_counts = df[["genre_str", "mood_str"]].value_counts()
-
+        # remove genre + mood with not enough data
+        min_count = 200
         if keep_only_small_subset:
-            index_to_remove = value_counts[value_counts <= 20]
-        else:
-            index_to_remove = value_counts[value_counts <= 400]
-
+            min_count = 20
+        value_counts = df[["genre_str", "mood_str"]].value_counts()
+        index_to_remove = value_counts[value_counts <= min_count]
         df = df[
             ~df.set_index(["genre_str", "mood_str"]).index.isin(index_to_remove.index)
         ]
 
+        # random under sampling
+        max_count = 400
+        if keep_only_small_subset:
+            min_count = 40
+        df = df.groupby("genre_mood_str").apply(
+            lambda x: x.sample(n=min(max_count, len(x)))
+        )
+        df.index = df.index.droplevel("genre_mood_str")
         df_train, df_test = train_test_split(
             df,
             test_size=0.04,
@@ -240,7 +249,6 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         train_dataset = load_from_disk(train_midi_abc_dataset_path)
         test_dataset = load_from_disk(test_midi_abc_dataset_path)
 
-    print(train_dataset)
     with llm_finetuning_train_dataset_path.open("w") as f:
         for r in train_dataset:
             instruct = get_instruction_data(r, with_intermediate_step=True)
