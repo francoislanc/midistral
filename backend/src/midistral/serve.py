@@ -59,7 +59,7 @@ async def limited_generate_abc_notation(request: Request):
     if get_settings().WITH_RAG:
         approach = InferenceApproach.RAG
     else:
-        approach = InferenceApproach.DIRECT_FINETUNED
+        approach = InferenceApproach.FINETUNED_1
 
     abc_notation_text, text_description = generate_abc_notation(des, approach)
 

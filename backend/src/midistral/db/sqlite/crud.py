@@ -118,13 +118,19 @@ def get_annotated_abcs_from_description(
         if len(res) == 0:
             # removing mood constraints
             description_without_mood = AudioTextDescription(
-                instruments=description.instruments, genre=description.genre, mood=[]
+                instruments=description.instruments,
+                genre=description.genre,
+                mood=[],
+                midi_instruments_num=None,
             )
             res = _get_annotated_abcs_from_description(description_without_mood, limit)
             if len(res) == 0:
                 # removing genre constraints
                 description_without_genre = AudioTextDescription(
-                    instruments=description.instruments, mood=description.mood, genre=[]
+                    instruments=description.instruments,
+                    mood=description.mood,
+                    genre=[],
+                    midi_instruments_num=None,
                 )
                 res = _get_annotated_abcs_from_description(
                     description_without_genre, limit
@@ -133,7 +139,10 @@ def get_annotated_abcs_from_description(
                 if len(res) == 0:
                     # removing both mood and genre constraints
                     description_without_mood_without_genre = AudioTextDescription(
-                        instruments=description.instruments, mood=[], genre=[]
+                        instruments=description.instruments,
+                        mood=[],
+                        genre=[],
+                        midi_instruments_num=None,
                     )
                     res = _get_annotated_abcs_from_description(
                         description_without_mood_without_genre, limit

@@ -9,7 +9,11 @@ from midistral.abc_utils import clean_generated_abc
 from midistral.config import get_settings
 from midistral.db.crud import get_crud
 from midistral.midi_utils import get_midi_and_ogg_from_abc
-from midistral.prepare_dataset import generate_instruction, generate_rag_instruction
+from midistral.prepare_dataset import (
+    generate_instruction,
+    generate_instruction_for_finetuned_model,
+    generate_rag_instruction,
+)
 from midistral.storage.gcs import upload_file
 from midistral.types import AudioTextDescription, InferenceApproach
 
@@ -56,23 +60,32 @@ def generate_abc_notation(
     desc: AudioTextDescription, approach: InferenceApproach
 ) -> str:
 
-    if approach == InferenceApproach.RAG:
-        print(desc)
+    if approach == InferenceApproach.PROMPT_ONLY:
+        text_description = generate_instruction(desc)
+        model = get_settings().PROMPT_MODEL_NAME
+        abc_notation_text = run_inference(model, text_description)
+    elif approach == InferenceApproach.RAG:
         annotated_abcs = get_crud().get_annotated_abcs_from_description(
             desc, get_settings().DB_LIMIT
         )
         random.shuffle(annotated_abcs)
-        for a in annotated_abcs:
-            print(a)
         abc_notations = [
             e.abc_notation for e in annotated_abcs[: get_settings().RETRIEVED_LIMIT]
         ]
         text_description = generate_rag_instruction(abc_notations)
         model = get_settings().RAG_MODEL_NAME
         abc_notation_text = run_inference(model, text_description)
-    elif approach == InferenceApproach.DIRECT_FINETUNED:
-        text_description = generate_instruction(desc)
-        model = get_settings().FINETUNED_MODEL_NAME
+    elif approach == InferenceApproach.FINETUNED_1:
+        text_description = generate_instruction_for_finetuned_model(
+            desc, with_instrument_num=False
+        )
+        model = get_settings().FINETUNED_MODEL_NAME_1
+        abc_notation_text = run_inference(model, text_description)
+    elif approach == InferenceApproach.FINETUNED_2:
+        text_description = generate_instruction_for_finetuned_model(
+            desc, with_instrument_num=True
+        )
+        model = get_settings().FINETUNED_MODEL_NAME_2
         abc_notation_text = run_inference(model, text_description)
     else:
         raise NotImplementedError(f"Approach '{approach}' not yet supported")

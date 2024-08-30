@@ -1,13 +1,14 @@
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AudioTextDescription(BaseModel):
     genre: List[str]
     mood: List[str]
-    instruments: List[int]
+    instruments: List[str]
+    midi_instruments_num: Optional[List[int]] = Field(default=None)
 
     def filter_values(self):
         self.genre = [g for g in self.genre if g in GENRE_VALUES]
@@ -21,10 +22,9 @@ class ABCNotation(BaseModel):
 
 class InferenceApproach(str, Enum):
     PROMPT_ONLY = "PROMPT_ONLY"
-    DIRECT_FINETUNED = "DIRECT_FINETUNED"
-    TWO_STEPS_FINETUNED = "TWO_STEPS_FINETUNED"
+    FINETUNED_1 = "FINETUNED_1"
+    FINETUNED_2 = "FINETUNED_2"
     RAG = "RAG"
-    RAG_FINETUNED = "RAG_FINETUNED"
 
 
 GENRE_VALUES: List[str] = [

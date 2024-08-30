@@ -189,6 +189,16 @@ other_genres = [
     "soundtrack",
 ]
 
+SIMPLIFIED_GENRES = [
+    "rock",
+    "electronic",
+    "classical",
+    "folk",
+    "pop",
+    "blues",
+    "hiphop",
+]
+
 
 def get_simplified_genres(genres: List[str]) -> List[str]:
     simplified_genres = set()
@@ -196,7 +206,7 @@ def get_simplified_genres(genres: List[str]) -> List[str]:
         if g in rock_related:
             simplified_genres.add("rock")
         elif g in electronic_dance:
-            simplified_genres.add("electronic_dance")
+            simplified_genres.add("electronic")
         elif g in classical_instrumental:
             simplified_genres.add("classical")
         elif g in folk_world:
@@ -334,6 +344,8 @@ other_moods = [
     "retro",
     "slow",
 ]
+
+SIMPLIFIED_MOODS = ["positive", "energetic", "calm", "emotional"]
 
 
 def get_simplified_moods(moods: List[str]) -> List[str]:

@@ -107,7 +107,38 @@ def prepare_midi_dataset(labeled_midi_dataset_path: Path, num_proc: int) -> Data
 
 
 def generate_instruction(desc: AudioTextDescription) -> str:
-    return desc.model_dump_json()
+    instructions = []
+    if len(desc.genre) > 0:
+        instructions.append("genre : " + ", ".join(desc.genre))
+    if len(desc.mood) > 0:
+        instructions.append("mood : " + ", ".join(desc.mood))
+    if len(desc.instruments) > 0:
+        instructions.append("instruments : " + ", ".join(desc.instruments))
+
+    return f"""You are a powerful text to ABC music notation model.
+Generate ABC music notation with {'; '.join(instructions)}.
+Don't explain anything."""
+
+
+def generate_instruction_for_finetuned_model(
+    desc: AudioTextDescription, with_instrument_num: bool
+) -> str:
+    # desc.model_dump_json()
+    instructions = []
+    if len(desc.genre) > 0:
+        instructions.append("genre : " + ", ".join(desc.genre))
+    if len(desc.mood) > 0:
+        instructions.append("mood : " + ", ".join(desc.mood))
+
+    if with_instrument_num and desc.midi_instruments_num:
+        instructions.append(
+            "instruments : " + ", ".join([str(i) for i in desc.instruments])
+        )
+    else:
+        if len(desc.instruments) > 0:
+            instructions.append("instruments : " + ", ".join(desc.instruments))
+
+    return "\n".join(instructions)
 
 
 def generate_rag_instruction(abc_notations: List[str]) -> str:
@@ -117,14 +148,17 @@ def generate_rag_instruction(abc_notations: List[str]) -> str:
     )
 
 
-def get_instruction_data(r, with_intermediate_step: bool = False) -> Dict:
+def get_instruction_data(r, with_instrument_num: bool) -> Dict:
 
     desc = AudioTextDescription(
         genre=r["genre"],
         mood=r["mood"],
-        instruments=list(set(r["instrument_numbers_sorted"])),
+        instruments=r["instrument_summary"],
+        midi_instruments_num=list(set(r["instrument_numbers_sorted"])),
     )
-    text_instruction = generate_instruction(desc)
+    text_instruction = generate_instruction_for_finetuned_model(
+        desc, with_instrument_num=with_instrument_num
+    )
     generation = r["abc_notation"]
 
     # remove escaped slash (\/) and continuation character (\\\n)
@@ -193,8 +227,11 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         and r["duration"] > 5
         and "[" not in r["abc_notation"]
         and "(" not in r["abc_notation"]
+        and "<" not in r["abc_notation"]
+        and ">" not in r["abc_notation"]
         and "%%MIDI program" in r["abc_notation"]
         and len(r["instrument_summary"]) > 0
+        and len(r["instrument_summary"]) <= 2
     )
 
     # simplified mood and genre tags
@@ -251,13 +288,13 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
 
     with llm_finetuning_train_dataset_path.open("w") as f:
         for r in train_dataset:
-            instruct = get_instruction_data(r, with_intermediate_step=True)
+            instruct = get_instruction_data(r, with_instrument_num=True)
             f.write(f"{json.dumps(instruct)}\n")
             f.flush()
 
     with llm_finetuning_eval_dataset_path.open("w") as f:
         for r in test_dataset:
-            instruct = get_instruction_data(r, with_intermediate_step=True)
+            instruct = get_instruction_data(r, with_instrument_num=True)
             f.write(f"{json.dumps(instruct)}\n")
             f.flush()
 
