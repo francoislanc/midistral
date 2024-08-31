@@ -1,3 +1,4 @@
+import itertools
 import json
 import re
 import shutil
@@ -5,9 +6,15 @@ import tarfile
 from pathlib import Path
 from typing import Dict, List
 
-from midistral.audio_analysis import get_simplified_genres, get_simplified_moods
+from midistral.audio_analysis import (
+    SIMPLIFIED_GENRES,
+    SIMPLIFIED_MOODS,
+    get_simplified_genres,
+    get_simplified_moods,
+)
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
+from datasets.utils import disable_progress_bars, enable_progress_bars
 from huggingface_hub import hf_hub_download
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -15,6 +22,7 @@ from tqdm import tqdm
 from midistral.dataset_features import midi_features
 from midistral.midi_utils import (
     get_abc_from_midi,
+    get_instrument_number,
     get_midi_tracks_nums,
 )
 from midistral.types import AudioTextDescription
@@ -130,10 +138,20 @@ def generate_instruction_for_finetuned_model(
     if len(desc.mood) > 0:
         instructions.append("mood : " + ", ".join(desc.mood))
 
-    if with_instrument_num and desc.midi_instruments_num:
-        instructions.append(
-            "instruments : " + ", ".join([str(i) for i in desc.instruments])
-        )
+    if with_instrument_num:
+        if desc.midi_instruments_num and len(desc.midi_instruments_num) > 0:
+            instructions.append(
+                "instruments : "
+                + ", ".join([str(i) for i in desc.midi_instruments_num])
+            )
+        else:
+            if len(desc.instruments) > 0:
+                instructions.append(
+                    "instruments : "
+                    + ", ".join(
+                        [str(get_instrument_number(i)) for i in desc.instruments]
+                    )
+                )
     else:
         if len(desc.instruments) > 0:
             instructions.append("instruments : " + ", ".join(desc.instruments))
@@ -179,10 +197,52 @@ def get_instruction_data(r, with_instrument_num: bool) -> Dict:
     }
 
 
+def generate_test_cases():
+    SOME_MAIN_INSTRUMENTS = [
+        "piano",
+        "acoustic guitar",
+        "trumpet",
+        "ocarina",
+    ]
+    all_instruments_combinations = []
+    all_moods_combinations = []
+    all_genres_combinations = []
+
+    max_instrument_selection = 2
+    for i in range(0, max_instrument_selection + 1):
+        els = [list(x) for x in itertools.combinations(SOME_MAIN_INSTRUMENTS, i)]
+        all_instruments_combinations.extend(els)
+
+    max_mood_selection = 2
+    for i in range(1, max_mood_selection + 1):
+        els = [
+            list(x)
+            for x in itertools.combinations(SIMPLIFIED_MOODS, i)
+            if list(x) != ["energetic", "calm"]
+        ]
+        all_moods_combinations.extend(els)
+
+    max_genre_selection = 1
+    for i in range(1, max_genre_selection + 1):
+        els = [list(x) for x in itertools.combinations(SIMPLIFIED_GENRES, i)]
+        all_genres_combinations.extend(els)
+
+    tests_cases = []
+    for i, m, g in itertools.product(
+        all_instruments_combinations, all_moods_combinations, all_genres_combinations
+    ):
+        tests_cases.append({"instrument_summary": i, "genre": g, "mood": m})
+
+    return tests_cases
+
+
 def prepare_dataset(keep_only_small_subset: bool) -> None:
     data_origins = ["midicaps", "vgm", "irishman"]
     labeled_midi_dataset_path = OUTPUT_FOLDER / "datasets" / "labeled_midi_dataset"
     midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset"
+    num_samples_by_constraint_path = (
+        OUTPUT_FOLDER / "datasets" / "num_samples_by_constraint.json"
+    )
     train_midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset-train"
     test_midi_abc_dataset_path = OUTPUT_FOLDER / "datasets" / "midi_abc_dataset-test"
     llm_finetuning_train_dataset_path = (
@@ -245,42 +305,60 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
 
     # split data with stratify option (to balance genre, mood, and instrument in train and test set)
     if not train_midi_abc_dataset_path.exists():
-        df = midi_abc_dataset_subset.to_pandas()
-        df["instrument_summary_str"] = df["instrument_summary"].apply(
-            lambda x: "-".join(sorted(x))
-        )
-        df["genre_str"] = df["genre"].apply(lambda x: "-".join(sorted(x)))
-        df["mood_str"] = df["mood"].apply(lambda x: "-".join(sorted(x)))
-        df["genre_mood_str"] = df["genre_str"] + "_" + df["mood_str"]
+        train_df_l = []
+        test_df_l = []
+        split_by_constraints = []
 
-        # remove genre + mood with not enough data
-        min_count = 200
-        if keep_only_small_subset:
-            min_count = 20
-        value_counts = df[["genre_str", "mood_str"]].value_counts()
-        index_to_remove = value_counts[value_counts <= min_count]
-        df = df[
-            ~df.set_index(["genre_str", "mood_str"]).index.isin(index_to_remove.index)
-        ]
+        test_cases = generate_test_cases()
+        max_count = 40
+        disable_progress_bars()
+        for constraints in tqdm(test_cases):
+            subset_test_case = midi_abc_dataset_subset.filter(
+                lambda r: set(constraints["genre"]).issubset(set(r["genre"]))
+                and set(constraints["mood"]).issubset(set(r["mood"]))
+                and set(constraints["instrument_summary"]).issubset(
+                    set(r["instrument_summary"])
+                )
+            )
+            subset_test_case_df = subset_test_case.to_pandas()
+            sample = subset_test_case_df.sample(
+                n=min(max_count, len(subset_test_case_df)), random_state=42
+            )
 
-        # random under sampling
-        max_count = 400
-        if keep_only_small_subset:
-            min_count = 40
-        df = df.groupby("genre_mood_str").apply(
-            lambda x: x.sample(n=min(max_count, len(x)))
-        )
-        df.index = df.index.droplevel("genre_mood_str")
-        df_train, df_test = train_test_split(
-            df,
-            test_size=0.04,
-            random_state=42,
-            stratify=df[["genre_str", "mood_str"]],
-        )
+            # set their value to the test constraints
+            sample["genre"] = sample["genre"].apply(lambda r: constraints["genre"])
+            sample["mood"] = sample["mood"].apply(lambda r: constraints["mood"])
 
-        train_dataset = midi_abc_dataset_subset.select(df_train.index)
+            if len(constraints["instrument_summary"]) == 0:
+                sample["instrument_summary"] = sample["instrument_summary"].apply(
+                    lambda r: constraints["instrument_summary"]
+                )
+
+            if len(sample) >= 4:
+                subset_test_case_df_train, subset_test_case_df_test = train_test_split(
+                    sample, test_size=0.04, random_state=42
+                )
+                split_by_constraints.append(
+                    {
+                        "constraints": constraints,
+                        "num_samples_train": len(subset_test_case_df_train),
+                        "num_samples_test": len(subset_test_case_df_test),
+                    }
+                )
+
+                train_df_l.append(subset_test_case_df_train)
+                test_df_l.append(subset_test_case_df_test)
+        enable_progress_bars()
+
+        train_df = pd.concat(train_df_l)
+        test_df = pd.concat(test_df_l)
+
+        with num_samples_by_constraint_path.open("w") as f:
+            json.dump(split_by_constraints, f, indent=2)
+
+        train_dataset = Dataset.from_pandas(train_df, preserve_index=False)
         train_dataset.save_to_disk(train_midi_abc_dataset_path)
-        test_dataset = midi_abc_dataset_subset.select(df_test.index)
+        test_dataset = Dataset.from_pandas(test_df, preserve_index=False)
         test_dataset.save_to_disk(test_midi_abc_dataset_path)
     else:
         train_dataset = load_from_disk(train_midi_abc_dataset_path)

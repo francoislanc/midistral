@@ -43,19 +43,19 @@ def run_finetuning(training_steps: int, upload_output_file: str, jobs_output_fil
                         if wandb_project
                         else None
                     ),
-                    auto_start=False,
+                    auto_start=True,
                 )
                 print(created_jobs)
                 with jobs_output_p.open("w") as f:
                     json.dump(created_jobs.model_dump(), f, indent=2)
 
-                answer = input("Start finetuning? (y/N)\n")
-                if answer.lower() in ["y", "yes"]:
-                    client.fine_tuning.jobs.start(job_id=created_jobs.id)
-                    return created_jobs
-                else:
-                    print("Cancelling")
-                    return None
+                # answer = input("Start finetuning? (y/N)\n")
+                # if answer.lower() in ["y", "yes"]:
+                #     client.fine_tuning.jobs.start(job_id=created_jobs.id)
+                #     return created_jobs
+                # else:
+                #     print("Cancelling")
+                #     return None
             else:
                 print("Cancelling")
                 return None

@@ -8,4 +8,9 @@ WORKDIR /home/dev
 
 ENV PATH="$PATH:/home/dev/.local/bin"
 
+RUN python3 -m pip install --upgrade pip
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+RUN pip install nvidia-cudnn-cu11
+
 CMD ["bash", "-c", "source /etc/bash.bashrc && jupyter notebook --notebook-dir=/home/dev --ip 0.0.0.0 --no-browser"]
