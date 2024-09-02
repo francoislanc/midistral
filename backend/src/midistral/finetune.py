@@ -9,7 +9,7 @@ from mistralai import DetailedJobOut, Mistral, WandbIntegration
 from midistral.config import get_settings
 
 
-def run_finetuning(training_steps: int, upload_output_file: str, jobs_output_file: str):
+def run_finetuning(epochs: int, upload_output_file: str, jobs_output_file: str):
     mistral_api_key = get_settings().MISTRAL_API_KEY
     wandb_api_key = get_settings().WANDB_API_KEY
     wandb_project = get_settings().WANDB_PROJECT
@@ -30,7 +30,7 @@ def run_finetuning(training_steps: int, upload_output_file: str, jobs_output_fil
                     training_files=[{"file_id": training_file_id, "weight": 1}],
                     validation_files=[validation_file_id],
                     hyperparameters={
-                        "training_steps": training_steps,
+                        "epochs": float(epochs),
                         "learning_rate": get_settings().LEARNING_RATE,
                     },
                     integrations=(
