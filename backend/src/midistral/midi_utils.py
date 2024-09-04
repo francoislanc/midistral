@@ -405,6 +405,9 @@ instruments_mapping = {
 instrument_numbers_mapping = dict(
     [(i.lower(), n) for n, i in instruments_mapping.items()]
 )
+# default piano with 0
+instrument_numbers_mapping["piano"] = 0
+instrument_numbers_mapping["synth lead"] = 81
 
 
 def get_instrument_name(number: int) -> Optional[str]:

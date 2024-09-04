@@ -6,12 +6,6 @@ import tarfile
 from pathlib import Path
 from typing import Dict, List
 
-from midistral.audio_analysis import (
-    SIMPLIFIED_GENRES,
-    SIMPLIFIED_MOODS,
-    get_simplified_genres,
-    get_simplified_moods,
-)
 import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
 from datasets.utils import disable_progress_bars, enable_progress_bars
@@ -19,13 +13,20 @@ from huggingface_hub import hf_hub_download
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
+from midistral.abc_utils import count_max_opened_parentheses, has_only_silence
+from midistral.audio_analysis import (
+    SIMPLIFIED_GENRES,
+    SIMPLIFIED_MOODS,
+    get_simplified_genres,
+    get_simplified_moods,
+)
 from midistral.dataset_features import midi_features
+from midistral.generate import get_instruction_data
 from midistral.midi_utils import (
     get_abc_from_midi,
     get_instrument_number,
     get_midi_tracks_nums,
 )
-from midistral.types import AudioTextDescription
 
 pd.options.mode.copy_on_write = True
 DATA_FOLDER = Path(__file__).resolve().parent.parent.parent / "data"
@@ -114,107 +115,30 @@ def prepare_midi_dataset(labeled_midi_dataset_path: Path, num_proc: int) -> Data
     return midi_abc_dataset
 
 
-def generate_instruction(desc: AudioTextDescription) -> str:
-    instructions = []
-    if len(desc.genre) > 0:
-        instructions.append("genre : " + ", ".join(desc.genre))
-    if len(desc.mood) > 0:
-        instructions.append("mood : " + ", ".join(desc.mood))
-    if len(desc.instruments) > 0:
-        instructions.append("instruments : " + ", ".join(desc.instruments))
-
-    return f"""You are a powerful text to ABC music notation model.
-Generate ABC music notation with {'; '.join(instructions)}.
-Don't explain anything."""
-
-
-def generate_instruction_for_finetuned_model(
-    desc: AudioTextDescription, with_instrument_num: bool
-) -> str:
-    # desc.model_dump_json()
-    instructions = []
-    if len(desc.genre) > 0:
-        instructions.append("genre : " + ", ".join(desc.genre))
-    if len(desc.mood) > 0:
-        instructions.append("mood : " + ", ".join(desc.mood))
-
-    if with_instrument_num:
-        if desc.midi_instruments_num and len(desc.midi_instruments_num) > 0:
-            instructions.append(
-                "instruments : "
-                + ", ".join([str(i) for i in desc.midi_instruments_num])
-            )
-        else:
-            if len(desc.instruments) > 0:
-                instructions.append(
-                    "instruments : "
-                    + ", ".join(
-                        [str(get_instrument_number(i)) for i in desc.instruments]
-                    )
-                )
-    else:
-        if len(desc.instruments) > 0:
-            instructions.append("instruments : " + ", ".join(desc.instruments))
-
-    return "\n".join(instructions)
-
-
-def generate_rag_instruction(abc_notations: List[str]) -> str:
-    return (
-        "Generate an ABC music notation inspired from these examples. Output only the generated ABC music notation. Keep similar MIDI program.\n"
-        + "\n".join(abc_notations)
-    )
-
-
-def get_instruction_data(r, with_instrument_num: bool) -> Dict:
-
-    desc = AudioTextDescription(
-        genre=r["genre"],
-        mood=r["mood"],
-        instruments=r["instrument_summary"],
-        midi_instruments_num=list(set(r["instrument_numbers_sorted"])),
-    )
-    text_instruction = generate_instruction_for_finetuned_model(
-        desc, with_instrument_num=with_instrument_num
-    )
-    generation = r["abc_notation"]
-
-    # remove escaped slash (\/) and continuation character (\\\n)
-    formatted_generation = re.sub(r"\\/", "/", generation)
-    formatted_generation = re.sub(r"\\\\\\n", "", formatted_generation).strip()
-
-    return {
-        "messages": [
-            {
-                "role": "user",
-                "content": text_instruction,
-            },
-            {
-                "role": "assistant",
-                "content": formatted_generation,
-            },
-        ]
-    }
-
-
-def generate_test_cases():
+def generate_train_cases():
     SOME_MAIN_INSTRUMENTS = [
         "piano",
-        "acoustic guitar",
         "trumpet",
         "ocarina",
+        "clarinet",
+        "electric guitar",
+        "string ensemble",
+        "trombone",
+        "acoustic bass",
+        "synth lead",
+        "acoustic guitar",
     ]
     all_instruments_combinations = []
     all_moods_combinations = []
     all_genres_combinations = []
 
-    max_instrument_selection = 2
+    max_instrument_selection = 1
     for i in range(0, max_instrument_selection + 1):
         els = [list(x) for x in itertools.combinations(SOME_MAIN_INSTRUMENTS, i)]
         all_instruments_combinations.extend(els)
 
     max_mood_selection = 2
-    for i in range(1, max_mood_selection + 1):
+    for i in range(0, max_mood_selection + 1):
         els = [
             list(x)
             for x in itertools.combinations(SIMPLIFIED_MOODS, i)
@@ -223,17 +147,23 @@ def generate_test_cases():
         all_moods_combinations.extend(els)
 
     max_genre_selection = 1
-    for i in range(1, max_genre_selection + 1):
+    for i in range(0, max_genre_selection + 1):
         els = [list(x) for x in itertools.combinations(SIMPLIFIED_GENRES, i)]
         all_genres_combinations.extend(els)
 
-    tests_cases = []
+    cases = []
+
+    for i in all_instruments_combinations:
+        if len(i) > 0:
+            cases.append({"instrument_summary": i, "genre": [], "mood": []})
+
     for i, m, g in itertools.product(
         all_instruments_combinations, all_moods_combinations, all_genres_combinations
     ):
-        tests_cases.append({"instrument_summary": i, "genre": g, "mood": m})
+        if len(g) > 0 or len(m) > 0:
+            cases.append({"instrument_summary": i, "genre": g, "mood": m})
 
-    return tests_cases
+    return cases
 
 
 def prepare_dataset(keep_only_small_subset: bool) -> None:
@@ -286,19 +216,18 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         lambda r: r["duration"] < 60
         and r["duration"] > 5
         and "[" not in r["abc_notation"]
-        and "(" not in r["abc_notation"]
-        and "<" not in r["abc_notation"]
-        and ">" not in r["abc_notation"]
+        and count_max_opened_parentheses(r["abc_notation"]) == 0
         and "%%MIDI program" in r["abc_notation"]
         and len(r["instrument_summary"]) > 0
-        and len(r["instrument_summary"]) <= 2
+        and len(r["instrument_summary"]) <= 1
+        and not has_only_silence(r["abc_notation"])
     )
 
     # simplified mood and genre tags
     midi_abc_dataset_subset = midi_abc_dataset_subset.map(
         lambda r: {
             "genre": get_simplified_genres(r["genre"][:2]),
-            "mood": get_simplified_moods(r["mood"]),
+            "mood": get_simplified_moods(r["mood"][:2]),
             "instrument_summary": [i.lower() for i in r["instrument_summary"]],
         }
     )
@@ -309,20 +238,24 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         test_df_l = []
         split_by_constraints = []
 
-        test_cases = generate_test_cases()
-        max_count = 40
+        train_cases = generate_train_cases()
+        max_samples = 64
+        min_samples = 4
         disable_progress_bars()
-        for constraints in tqdm(test_cases):
-            subset_test_case = midi_abc_dataset_subset.filter(
+        for constraints in tqdm(train_cases):
+            numbered_instruments = [
+                get_instrument_number(i) for i in constraints["instrument_summary"]
+            ]
+            subset = midi_abc_dataset_subset.filter(
                 lambda r: set(constraints["genre"]).issubset(set(r["genre"]))
                 and set(constraints["mood"]).issubset(set(r["mood"]))
-                and set(constraints["instrument_summary"]).issubset(
-                    set(r["instrument_summary"])
+                and set(numbered_instruments).issubset(
+                    set(r["instrument_numbers_sorted"])
                 )
             )
-            subset_test_case_df = subset_test_case.to_pandas()
-            sample = subset_test_case_df.sample(
-                n=min(max_count, len(subset_test_case_df)), random_state=42
+            subset_df = subset.to_pandas()
+            sample = subset_df.sample(
+                n=min(max_samples, len(subset_df)), random_state=42
             )
 
             # set their value to the test constraints
@@ -331,23 +264,26 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
 
             if len(constraints["instrument_summary"]) == 0:
                 sample["instrument_summary"] = sample["instrument_summary"].apply(
-                    lambda r: constraints["instrument_summary"]
+                    lambda r: []
                 )
+                sample["instrument_numbers_sorted"] = sample[
+                    "instrument_summary"
+                ].apply(lambda r: None)
 
-            if len(sample) >= 4:
-                subset_test_case_df_train, subset_test_case_df_test = train_test_split(
+            if len(sample) >= min_samples:
+                subset_df_train, subset_df_test = train_test_split(
                     sample, test_size=0.04, random_state=42
                 )
                 split_by_constraints.append(
                     {
                         "constraints": constraints,
-                        "num_samples_train": len(subset_test_case_df_train),
-                        "num_samples_test": len(subset_test_case_df_test),
+                        "num_samples_train": len(subset_df_train),
+                        "num_samples_test": len(subset_df_test),
                     }
                 )
 
-                train_df_l.append(subset_test_case_df_train)
-                test_df_l.append(subset_test_case_df_test)
+                train_df_l.append(subset_df_train)
+                test_df_l.append(subset_df_test)
         enable_progress_bars()
 
         train_df = pd.concat(train_df_l)
@@ -357,8 +293,10 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
             json.dump(split_by_constraints, f, indent=2)
 
         train_dataset = Dataset.from_pandas(train_df, preserve_index=False)
+        train_dataset = train_dataset.shuffle(seed=42)
         train_dataset.save_to_disk(train_midi_abc_dataset_path)
         test_dataset = Dataset.from_pandas(test_df, preserve_index=False)
+        test_dataset = test_dataset.shuffle(seed=42)
         test_dataset.save_to_disk(test_midi_abc_dataset_path)
     else:
         train_dataset = load_from_disk(train_midi_abc_dataset_path)

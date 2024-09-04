@@ -22,7 +22,7 @@ WORKDIR $APP_HOME
 COPY /src $APP_HOME/src
 COPY pyproject.toml $APP_HOME
 COPY poetry.lock $APP_HOME
-RUN poetry install
+RUN poetry install --without audio-analysis 
 
 EXPOSE 8000
 CMD ["poetry", "run", "fastapi", "run", "src/midistral/serve.py", "--proxy-headers"]

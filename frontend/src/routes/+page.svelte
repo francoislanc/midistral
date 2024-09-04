@@ -82,6 +82,9 @@
 		if (selectedValues.instruments.length > 1) {
 			selectedValues.instruments = selectedValues.instruments.slice(1);
 		}
+		if (selectedValues.mood.length > 2) {
+			selectedValues.mood = selectedValues.mood.slice(1);
+		}
 	};
 
 	let feedbackLiked = false;

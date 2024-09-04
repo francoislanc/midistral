@@ -15,6 +15,7 @@ class AbcGeneration(Base):
     text_description = Column(String)
     abc_notation = Column(String)
     file_uuid = Column(String)
+    approach = Column(String)
     liked = Column(Boolean, default=False)
 
 

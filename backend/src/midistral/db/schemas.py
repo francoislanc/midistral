@@ -10,6 +10,7 @@ class AbcGenerationBase(BaseModel):
     text_description: str
     abc_notation: str
     file_uuid: str
+    approach: str
     liked: Union[bool, None] = None
 
 

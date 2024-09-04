@@ -16,8 +16,7 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float
     LLM_MAX_TOKEN: int
     PROMPT_MODEL_NAME: str
-    FINETUNED_MODEL_NAME_1: str
-    FINETUNED_MODEL_NAME_2: str
+    FINETUNED_MODEL_NAME: str
     RAG_MODEL_NAME: str
     FRONT_END_ORIGIN: str
 
@@ -29,7 +28,7 @@ class Settings(BaseSettings):
     GCP_PROJECT: Optional[str] = None
     GCS_BUCKET: Optional[str] = None
 
-    APP_VERSION: str = "31.08.1"
+    APP_VERSION: str = "24.9.1"
 
     model_config = SettingsConfigDict(env_file=str(MIDISTRAL_FOLDER / "local.env"))
 

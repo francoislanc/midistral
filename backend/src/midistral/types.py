@@ -22,45 +22,25 @@ class ABCNotation(BaseModel):
 
 class InferenceApproach(str, Enum):
     PROMPT_ONLY = "PROMPT_ONLY"
-    FINETUNED_1 = "FINETUNED_1"
-    FINETUNED_2 = "FINETUNED_2"
+    FINETUNED = "FINETUNED"
     RAG = "RAG"
 
 
 GENRE_VALUES: List[str] = [
-    "electronic",
     "classical",
-    "soundtrack",
+    "electronic",
     "pop",
-    "experimental",
-    "ambient",
+    "soundtrack",
 ]
 
-MOOD_VALUES: List[str] = [
-    "dark",
-    "melodic",
-    "film",
-    "energetic",
-    "happy",
-    "relaxing",
-    "emotional",
-    "slow",
-    "epic",
-]
+MOOD_VALUES: List[str] = ["positive", "energetic", "calm", "emotional", "film"]
 
 INSTRUMENTS_VALUES: List[str] = [
-    "piano",
-    "hammond organ",
-    "synth lead",
-    "vibraphone",
-    "clavinet",
     "acoustic guitar",
+    "piano",
     "clarinet",
-    "bassoon",
-    "trumpet",
-    "synth bass",
-    "harmonica",
     "ocarina",
-    "flute",
-    "violin",
+    "synth lead",
+    "trombone",
+    "trumpet",
 ]

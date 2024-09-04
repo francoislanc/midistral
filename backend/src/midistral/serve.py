@@ -1,3 +1,4 @@
+import random
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request
@@ -56,12 +57,10 @@ async def limited_generate_abc_notation(request: Request):
     des = AudioTextDescription.model_validate(req_obj)
     des.filter_values()
 
-    if get_settings().WITH_RAG:
-        approach = InferenceApproach.RAG
-    else:
-        approach = InferenceApproach.FINETUNED_1
+    approaches = [InferenceApproach.RAG, InferenceApproach.FINETUNED]
+    selected_approach = random.sample(approaches, 1)[0]
 
-    abc_notation_text, text_description = generate_abc_notation(des, approach)
+    abc_notation_text, text_description = generate_abc_notation(des, selected_approach)
 
     if len(text_description) > 0:
         # abc_notation_text = "X: 1\nM: 4/4\nL: 1/8\nQ:1/4=120\nK:D\nV:1\n%%MIDI program 0\n G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|G/2G/2c/2A/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2| B/2B/2d/2G/2| A/2A/2F/2G/2| B/2B/2d/2G/2|\n"
@@ -69,6 +68,7 @@ async def limited_generate_abc_notation(request: Request):
         abc_generation = schemas.AbcGenerationCreate(
             text_description=text_description,
             abc_notation=abc_notation_text,
+            approach=selected_approach.value,
             file_uuid=file_uuid,
         )
 

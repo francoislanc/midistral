@@ -44,5 +44,8 @@ def clean_generated_abc(abc: str) -> str:
         repl_midi_program,
         abc,
     )
+    abc = re.sub("\nThis(.*)", "", abc)
+    abc = re.sub("\nThe(.*)", "", abc)
+    abc = re.sub("\ngenre :(.*)", "", abc)
     abc = abc.replace("\n\n", "\n")
     return abc

@@ -1,9 +1,9 @@
 import json
-from typing import List
 import urllib.request
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
+from typing import List
 
 import essentia
 import numpy as np
@@ -186,37 +186,33 @@ other_genres = [
     "newage",
     "reggae",
     "soul",
-    "soundtrack",
 ]
 
 SIMPLIFIED_GENRES = [
-    "rock",
+    # "rock",
     "electronic",
     "classical",
-    "folk",
+    # "folk",
     "pop",
     "blues",
-    "hiphop",
+    # "hiphop",
+    "soundtrack",
 ]
 
 
 def get_simplified_genres(genres: List[str]) -> List[str]:
     simplified_genres = set()
     for g in genres:
-        if g in rock_related:
-            simplified_genres.add("rock")
-        elif g in electronic_dance:
+        if g in electronic_dance:
             simplified_genres.add("electronic")
         elif g in classical_instrumental:
             simplified_genres.add("classical")
-        elif g in folk_world:
-            simplified_genres.add("folk")
         elif g in pop_related:
             simplified_genres.add("pop")
         elif g in blues_related:
             simplified_genres.add("blues")
-        elif g in hiphop_related:
-            simplified_genres.add("hiphop")
+        elif g == "soundtrack":
+            simplified_genres.add("soundtrack")
     return list(simplified_genres)
 
 
@@ -335,7 +331,6 @@ entertainment_media_moods = [
 other_moods = [
     "children",
     "cool",
-    "dark",
     "deep",
     "dream",
     "heavy",
@@ -345,7 +340,7 @@ other_moods = [
     "slow",
 ]
 
-SIMPLIFIED_MOODS = ["positive", "energetic", "calm", "emotional"]
+SIMPLIFIED_MOODS = ["positive", "energetic", "calm", "emotional", "film"]
 
 
 def get_simplified_moods(moods: List[str]) -> List[str]:
@@ -359,6 +354,8 @@ def get_simplified_moods(moods: List[str]) -> List[str]:
             simplified_moods.add("calm")
         elif m in emotional_melancholic_moods:
             simplified_moods.add("emotional")
+        elif m in entertainment_media_moods:
+            simplified_moods.add("film")
 
     return list(simplified_moods)
 

@@ -57,6 +57,7 @@ def create_annotated_abc(
     # https://stackoverflow.com/questions/54987399/firestore-search-array-contains-for-multiple-values
 
     val = {**annotated_abc.model_dump(), "id": doc_id}
+    del val["description"]["midi_instruments_num"]
     val["description"] = {
         k: {reformat_key(ev, True): True for ev in v}
         for k, v in val["description"].items()
