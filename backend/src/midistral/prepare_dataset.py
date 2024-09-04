@@ -81,7 +81,7 @@ def clean_labeled_midi_dataset(
 
     labeled_midi_dataset_df["origin"] = origin
     if keep_only_small_subset:
-        labeled_midi_dataset_df = labeled_midi_dataset_df.head(500)
+        labeled_midi_dataset_df = labeled_midi_dataset_df.head(1000)
     # create dataset
     labeled_midi_dataset = Dataset.from_pandas(
         labeled_midi_dataset_df, preserve_index=False
