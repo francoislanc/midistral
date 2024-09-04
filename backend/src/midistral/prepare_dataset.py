@@ -238,7 +238,10 @@ def prepare_dataset(keep_only_small_subset: bool) -> None:
         test_df_l = []
         split_by_constraints = []
 
-        train_cases = generate_train_cases()
+        if keep_only_small_subset:
+            train_cases = [{"instrument_summary": ["piano"], "genre": [], "mood": []}]
+        else:
+            train_cases = generate_train_cases()
         max_samples = 64
         min_samples = 4
         disable_progress_bars()
