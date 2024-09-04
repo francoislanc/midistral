@@ -9,11 +9,11 @@ This repository contains code :
 ## Future developments
 
 - Improve model
-  - Use more MIDI datasets (e.g. projectlosangeles/Los-Angeles-MIDI-Dataset, VGMusic, ...)
-  - Test RAG approach
-  - Adapt finetuning to follow more "instruments" constraints
+  - Test other models (ChatMusician)
+  - Investigate mood and genre constraints
   - Support more voices/tracks
   - Support more Natural Language text input
+  - Explore fill-in-the-middle completion
   
 - Improve front-end
   - Allow user generations sharing
